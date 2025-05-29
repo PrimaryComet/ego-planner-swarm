@@ -11,6 +11,7 @@
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <stdlib.h>
+#include <string>
 
 using std::vector;
 namespace ego_planner
@@ -27,6 +28,8 @@ namespace ego_planner
     ros::Publisher a_star_list_pub;
     ros::Publisher guide_vector_pub;
     ros::Publisher intermediate_state_pub;
+    
+    std::string frame_id;
 
   public:
     PlanningVisualization(/* args */) {}

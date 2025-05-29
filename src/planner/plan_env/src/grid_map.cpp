@@ -22,6 +22,8 @@ void GridMap::initMap(ros::NodeHandle &nh)
   node_.param("grid_map/fy", mp_.fy_, -1.0);
   node_.param("grid_map/cx", mp_.cx_, -1.0);
   node_.param("grid_map/cy", mp_.cy_, -1.0);
+  node_.param("grid_map/px", mp_.px_, -1.0);
+  node_.param("grid_map/py", mp_.py_, -1.0);
 
   node_.param("grid_map/use_depth_filter", mp_.use_depth_filter_, true);
   node_.param("grid_map/depth_filter_tolerance", mp_.depth_filter_tolerance_, -1.0);
@@ -95,7 +97,7 @@ void GridMap::initMap(ros::NodeHandle &nh)
 
   md_.raycast_num_ = 0;
 
-  md_.proj_points_.resize(640 * 480 / mp_.skip_pixel_ / mp_.skip_pixel_);
+  md_.proj_points_.resize(mp_.px_ * mp_.py_ / mp_.skip_pixel_ / mp_.skip_pixel_);
   md_.proj_points_cnt = 0;
 
   md_.cam2body_ << 0.0, 0.0, 1.0, 0.0,

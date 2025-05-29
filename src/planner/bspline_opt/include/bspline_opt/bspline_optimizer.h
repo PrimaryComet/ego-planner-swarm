@@ -3,7 +3,6 @@
 
 #include <Eigen/Eigen>
 #include <path_searching/dyn_a_star.h>
-#include <bspline_opt/uniform_bspline.h>
 #include <plan_env/grid_map.h>
 #include <plan_env/obj_predictor.h>
 #include <ros/ros.h>

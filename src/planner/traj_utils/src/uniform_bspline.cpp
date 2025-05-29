@@ -1,4 +1,4 @@
-#include "bspline_opt/uniform_bspline.h"
+#include "traj_utils/uniform_bspline.h"
 #include <ros/ros.h>
 
 namespace ego_planner

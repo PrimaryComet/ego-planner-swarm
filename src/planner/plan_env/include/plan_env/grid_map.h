@@ -56,7 +56,7 @@ struct MappingParameters {
   int pose_type_;
 
   /* camera parameters */
-  double cx_, cy_, fx_, fy_;
+  double cx_, cy_, fx_, fy_, px_, py_;
 
   /* time out */
   double odom_depth_timeout_;

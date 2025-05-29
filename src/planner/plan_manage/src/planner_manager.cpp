@@ -2,6 +2,7 @@
 #include <plan_manage/planner_manager.h>
 #include <thread>
 #include "visualization_msgs/Marker.h" // zx-todo
+#include <std_msgs/Float64MultiArray.h>
 
 namespace ego_planner
 {
@@ -40,6 +41,8 @@ namespace ego_planner
     bspline_optimizer_->a_star_->initGridMap(grid_map_, Eigen::Vector3i(100, 100, 100));
 
     visualization_ = vis;
+
+    opt_data_pub_ = nh.advertise<std_msgs::Float64MultiArray>("/experiments/opt_data", 1);
   }
 
   // !SECTION
@@ -50,6 +53,14 @@ namespace ego_planner
                                         Eigen::Vector3d start_acc, Eigen::Vector3d local_target_pt,
                                         Eigen::Vector3d local_target_vel, bool flag_polyInit, bool flag_randomPolyTraj)
   {
+    std_msgs::Float64MultiArray opt_data_msg;
+    static bool success_flag = true;
+    static double success_timing;
+
+    if(success_flag){
+      success_timing = ros::Time::now().toSec();
+      success_flag = false;
+    }
     static int count = 0;
     printf("\033[47;30m\n[drone %d replan %d]==============================================\033[0m\n", pp_.drone_id, count++);
     // cout.precision(3);
@@ -174,6 +185,12 @@ namespace ego_planner
             {
               ROS_ERROR("pseudo_arc_length is empty, return!");
               continous_failures_count_++;
+              opt_data_msg.data.push_back(-1.0);
+              opt_data_msg.data.push_back(-1.0);
+              opt_data_msg.data.push_back(-1.0);
+              opt_data_msg.data.push_back(-1.0);
+              opt_data_msg.data.push_back(1.0); // error code, 1 means init failed
+              opt_data_pub_.publish(opt_data_msg);
               return false;
             }
           }
@@ -281,6 +298,12 @@ namespace ego_planner
     {
       visualization_->displayOptimalList(ctrl_pts, 0);
       continous_failures_count_++;
+      opt_data_msg.data.push_back(t_init.toSec());
+      opt_data_msg.data.push_back(t_opt.toSec());
+      opt_data_msg.data.push_back(-1.0); 
+      opt_data_msg.data.push_back(-1.0); // time from start to success
+      opt_data_msg.data.push_back(3.0); // error code, 3 means main plan collided
+      opt_data_pub_.publish(opt_data_msg);
       return false;
     }
 
@@ -310,6 +333,13 @@ namespace ego_planner
       {
         printf("\033[34mThis refined trajectory hits obstacles. It doesn't matter if appeares occasionally. But if continously appearing, Increase parameter \"lambda_fitness\".\n\033[0m");
         continous_failures_count_++;
+        t_refine = ros::Time::now() - t_start;
+        opt_data_msg.data.push_back(t_init.toSec());
+        opt_data_msg.data.push_back(t_opt.toSec());
+        opt_data_msg.data.push_back(-1.0); // 
+        opt_data_msg.data.push_back(-1.0);
+        opt_data_msg.data.push_back(4.0); // error code, 3 means refined plan collided
+        opt_data_pub_.publish(opt_data_msg);
         return false;
       }
     }
@@ -333,7 +363,14 @@ namespace ego_planner
     sum_time += (t_init + t_opt + t_refine).toSec();
     count_success++;
     cout << "total time:\033[42m" << (t_init + t_opt + t_refine).toSec() << "\033[0m,optimize:" << (t_init + t_opt).toSec() << ",refine:" << t_refine.toSec() << ",avg_time=" << sum_time / count_success << endl;
-
+    double t_start_to_success_s = ros::Time::now().toSec() - success_timing;
+    success_flag = true;
+    opt_data_msg.data.push_back(t_init.toSec());
+    opt_data_msg.data.push_back(t_opt.toSec());
+    opt_data_msg.data.push_back(t_refine.toSec()); // error code, 2 means plan collided
+    opt_data_msg.data.push_back(t_start_to_success_s); // time from start to success
+    opt_data_msg.data.push_back(0.0); // error code, 0 means no error
+    opt_data_pub_.publish(opt_data_msg);
     // success. YoY
     continous_failures_count_ = 0;
     return true;

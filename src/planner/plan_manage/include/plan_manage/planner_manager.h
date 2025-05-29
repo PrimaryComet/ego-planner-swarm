@@ -4,7 +4,7 @@
 #include <stdlib.h>
 
 #include <bspline_opt/bspline_optimizer.h>
-#include <bspline_opt/uniform_bspline.h>
+#include <traj_utils/uniform_bspline.h>
 #include <traj_utils/DataDisp.h>
 #include <plan_env/grid_map.h>
 #include <plan_env/obj_predictor.h>
@@ -59,7 +59,7 @@ namespace ego_planner
     PlanningVisualization::Ptr visualization_;
 
     // ros::Publisher obj_pub_; //zx-todo 
-
+    ros::Publisher opt_data_pub_;
     BsplineOptimizer::Ptr bspline_optimizer_;
 
     int continous_failures_count_{0};

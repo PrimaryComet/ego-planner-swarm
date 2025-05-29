@@ -36,7 +36,7 @@ include_directories(
 )
 
 add_library( bspline_opt 
-    src/uniform_bspline.cpp 
+    
     src/bspline_optimizer.cpp 
     src/gradient_descent_optimizer.cpp
     )

@@ -1,4 +1,5 @@
 #include <traj_utils/planning_visualization.h>
+#include <string>
 
 using std::cout;
 using std::endl;
@@ -7,7 +8,7 @@ namespace ego_planner
   PlanningVisualization::PlanningVisualization(ros::NodeHandle &nh)
   {
     node = nh;
-
+    nh.param("frame_id",frame_id,std::string("world"));
     goal_point_pub = nh.advertise<visualization_msgs::Marker>("goal_point", 2);
     global_list_pub = nh.advertise<visualization_msgs::Marker>("global_list", 2);
     init_list_pub = nh.advertise<visualization_msgs::Marker>("init_list", 2);
@@ -20,7 +21,7 @@ namespace ego_planner
                                                 Eigen::Vector4d color, int id, bool show_sphere /* = true */ )
   {
     visualization_msgs::Marker sphere, line_strip;
-    sphere.header.frame_id = line_strip.header.frame_id = "world";
+    sphere.header.frame_id = line_strip.header.frame_id = frame_id;
     sphere.header.stamp = line_strip.header.stamp = ros::Time::now();
     sphere.type = visualization_msgs::Marker::SPHERE_LIST;
     line_strip.type = visualization_msgs::Marker::LINE_STRIP;
@@ -131,7 +132,7 @@ namespace ego_planner
   void PlanningVisualization::displayGoalPoint(Eigen::Vector3d goal_point, Eigen::Vector4d color, const double scale, int id)
   {
     visualization_msgs::Marker sphere;
-    sphere.header.frame_id = "world";
+    sphere.header.frame_id = frame_id;
     sphere.header.stamp = ros::Time::now();
     sphere.type = visualization_msgs::Marker::SPHERE;
     sphere.action = visualization_msgs::Marker::ADD;

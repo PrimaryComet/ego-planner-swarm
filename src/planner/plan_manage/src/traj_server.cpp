@@ -1,14 +1,17 @@
-#include "bspline_opt/uniform_bspline.h"
+#include "traj_utils/uniform_bspline.h"
 #include "nav_msgs/Odometry.h"
 #include "traj_utils/Bspline.h"
 #include "quadrotor_msgs/PositionCommand.h"
 #include "std_msgs/Empty.h"
 #include "visualization_msgs/Marker.h"
 #include <ros/ros.h>
-
-ros::Publisher pos_cmd_pub;
+#include <mrs_msgs/TrackerCommand.h>
+#include <std_msgs/String.h>
+ros::Publisher pos_cmd_pub,mrs_cmd_pub;
 
 quadrotor_msgs::PositionCommand cmd;
+mrs_msgs::TrackerCommand mrs_cmd;
+
 double pos_gain[3] = {0, 0, 0};
 double vel_gain[3] = {0, 0, 0};
 
@@ -19,6 +22,7 @@ vector<UniformBspline> traj_;
 double traj_duration_;
 ros::Time start_time_;
 int traj_id_;
+string frame_id;
 
 // yaw control
 double last_yaw_, last_yaw_dot_;
@@ -71,7 +75,7 @@ void bsplineCallback(traj_utils::BsplineConstPtr msg)
 std::pair<double, double> calculate_yaw(double t_cur, Eigen::Vector3d &pos, ros::Time &time_now, ros::Time &time_last)
 {
   constexpr double PI = 3.1415926;
-  constexpr double YAW_DOT_MAX_PER_SEC = PI;
+  constexpr double YAW_DOT_MAX_PER_SEC = 2.0; //max heading rate, rad/s, 2.0 is the max heading rate of the fast constraint setting in MRS. Originally Pi
   // constexpr double YAW_DOT_DOT_MAX_PER_SEC = PI;
   std::pair<double, double> yaw_yawdot(0, 0);
   double yaw = 0;
@@ -228,6 +232,83 @@ void cmdCallback(const ros::TimerEvent &e)
 
   pos_cmd_pub.publish(cmd);
 }
+void mrs_callback(const ros::TimerEvent &e){
+  /* no publishing before receive traj_ */
+  if (!receive_traj_)
+    return;
+  ros::Time time_now = ros::Time::now();
+  double t_cur = (time_now - start_time_).toSec();
+
+  Eigen::Vector3d pos(Eigen::Vector3d::Zero()), vel(Eigen::Vector3d::Zero()), acc(Eigen::Vector3d::Zero()), pos_f;
+  std::pair<double, double> yaw_yawdot(0, 0);
+
+  static ros::Time time_last = ros::Time::now();
+  if (t_cur < traj_duration_ && t_cur >= 0.0)
+  {
+    pos = traj_[0].evaluateDeBoorT(t_cur);
+    vel = traj_[1].evaluateDeBoorT(t_cur);
+    acc = traj_[2].evaluateDeBoorT(t_cur);
+
+    /*** calculate yaw ***/
+    yaw_yawdot = calculate_yaw(t_cur, pos, time_now, time_last);
+    /*** calculate yaw ***/
+
+    double tf = min(traj_duration_, t_cur + 2.0);
+    pos_f = traj_[0].evaluateDeBoorT(tf);
+  }
+  else if (t_cur >= traj_duration_)
+  {
+    /* hover when finish traj_ */
+    pos = traj_[0].evaluateDeBoorT(traj_duration_);
+    vel.setZero();
+    acc.setZero();
+
+    yaw_yawdot.first = last_yaw_;
+    yaw_yawdot.second = 0;
+
+    pos_f = pos;
+  }
+  else
+  {
+    cout << "[Traj server]: invalid time." << endl;
+  }
+  time_last = time_now;
+  mrs_cmd.header.stamp = time_now;
+  mrs_cmd.header.frame_id = frame_id;
+  
+  mrs_cmd.position.x = pos(0);
+  mrs_cmd.position.y = pos(1);
+  mrs_cmd.position.z = pos(2);
+  mrs_cmd.heading = yaw_yawdot.first;
+
+  mrs_cmd.velocity.x = vel(0);
+  mrs_cmd.velocity.y = vel(1);
+  mrs_cmd.velocity.z = vel(2);
+  mrs_cmd.heading_rate = yaw_yawdot.second;
+
+  mrs_cmd.acceleration.x = acc(0);
+  mrs_cmd.acceleration.y = acc(1);
+  mrs_cmd.acceleration.z = acc(2);
+
+  mrs_cmd.use_position_vertical = 1;
+  mrs_cmd.use_position_horizontal = 1;
+  mrs_cmd.use_heading = 1;
+
+  mrs_cmd.use_velocity_vertical = 1;
+  mrs_cmd.use_velocity_horizontal = 1;
+  mrs_cmd.use_heading_rate = 1;
+
+  mrs_cmd.use_acceleration = 1;
+  mrs_cmd.use_heading_acceleration = 0;
+  mrs_cmd.use_jerk = 0;
+  mrs_cmd.use_heading_jerk = 0;
+  mrs_cmd.use_orientation = 0;
+  mrs_cmd.use_snap = 0;
+
+  last_yaw_ = yaw_yawdot.first;
+
+  mrs_cmd_pub.publish(mrs_cmd);
+}
 
 int main(int argc, char **argv)
 {
@@ -237,9 +318,23 @@ int main(int argc, char **argv)
 
   ros::Subscriber bspline_sub = nh.subscribe("planning/bspline", 10, bsplineCallback);
 
-  pos_cmd_pub = nh.advertise<quadrotor_msgs::PositionCommand>("/position_cmd", 50);
+  bool use_mrs;
+  string mrs_traj_topic;
+  nh.param("traj_server/use_mrs", use_mrs, false);
+  nh.param("traj_server/mrs_traj_topic", mrs_traj_topic, string(""));
+  ros::Timer cmd_timer;
+  if(use_mrs){
+    ROS_WARN("Using MRS simulation");
+    mrs_cmd_pub = nh.advertise<mrs_msgs::TrackerCommand>(mrs_traj_topic, 50);
+    std::cout << "Advertising command topic on " << mrs_traj_topic << std::endl;
+    cmd_timer = nh.createTimer(ros::Duration(0.01), mrs_callback);
+  } else{
+    ROS_WARN("Using EGO simulation");
+    pos_cmd_pub = nh.advertise<quadrotor_msgs::PositionCommand>("/position_cmd", 50);
 
-  ros::Timer cmd_timer = nh.createTimer(ros::Duration(0.01), cmdCallback);
+    cmd_timer = nh.createTimer(ros::Duration(0.01), cmdCallback);
+  }
+
 
   /* control parameter */
   cmd.kx[0] = pos_gain[0];
@@ -251,6 +346,8 @@ int main(int argc, char **argv)
   cmd.kv[2] = vel_gain[2];
 
   nh.param("traj_server/time_forward", time_forward_, -1.0);
+  nh.param("frame_id", frame_id, string("world"));
+  
   last_yaw_ = 0.0;
   last_yaw_dot_ = 0.0;
 
