@@ -359,7 +359,7 @@ namespace ego_planner
     t_refine = ros::WallTime::now() - t_start;
 
     // save planned results
-    updateTrajInfo(pos, t_opt_start);
+    updateTrajInfo(pos, ros::Time::now());
 
     static double sum_time = 0;
     static int count_success = 0;

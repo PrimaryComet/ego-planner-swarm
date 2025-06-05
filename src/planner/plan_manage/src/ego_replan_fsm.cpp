@@ -1,5 +1,8 @@
 
 #include <plan_manage/ego_replan_fsm.h>
+#include <std_msgs/String.h>
+#include <mrs_msgs/ReferenceStampedSrv.h>
+#include <mrs_msgs/String.h>
 
 namespace ego_planner
 {
@@ -21,6 +24,7 @@ namespace ego_planner
     nh.param("fsm/emergency_time", emergency_time_, 1.0);
     nh.param("fsm/realworld_experiment", flag_realworld_experiment_, false);
     nh.param("fsm/fail_safe", enable_fail_safe_, true);
+    nh.param("fsm/use_mrs", use_mrs_, false);
 
     have_trigger_ = !flag_realworld_experiment_;
 
@@ -58,6 +62,8 @@ namespace ego_planner
 
     bspline_pub_ = nh.advertise<traj_utils::Bspline>("planning/bspline", 10);
     data_disp_pub_ = nh.advertise<traj_utils::DataDisp>("planning/data_display", 100);
+    if(use_mrs_)
+      exp_status_pub = nh.advertise<std_msgs::String>("/experiments/fsm_state",100);
 
     if (target_type_ == TARGET_TYPE::MANUAL_TARGET)
     {
@@ -414,6 +420,11 @@ namespace ego_planner
     int pre_s = int(exec_state_);
     exec_state_ = new_state;
     cout << "[" + pos_call + "]: from " + state_str[pre_s] + " to " + state_str[int(new_state)] << endl;
+    if(use_mrs_){
+      std_msgs::String msg;
+      msg.data = state_str[int(new_state)];
+      exp_status_pub.publish(msg);
+    }
   }
 
   std::pair<int, EGOReplanFSM::FSM_EXEC_STATE> EGOReplanFSM::timesOfConsecutiveStateCalls()
@@ -453,7 +464,49 @@ namespace ego_planner
         goto force_return;
         // return;
       }
-      changeFSMExecState(WAIT_TARGET, "FSM");
+      if(use_mrs_){
+        mrs_msgs::ReferenceStampedSrv refsrv;
+        refsrv.request.reference.position.x = -12.0;
+        refsrv.request.reference.position.y = 0;
+        refsrv.request.reference.position.z = 1.0;
+        refsrv.request.header.frame_id = "/uav1/world_origin";
+        refsrv.request.header.stamp = ros::Time::now();
+        refsrv.request.reference.heading = 0.0;
+
+        if(ros::service::call("/uav1/control_manager/reference", refsrv))
+        {
+          ROS_INFO("Directing UAV  to start point ");
+          while(ros::ok() && !have_odom_)
+          {
+            ros::spinOnce();
+            ros::Duration(0.01).sleep();
+            Eigen::Vector3d pos(odom_pos_(0), odom_pos_(1), odom_pos_(2));
+            Eigen::Vector3d ref_pos(refsrv.request.reference.position.x, refsrv.request.reference.position.y, refsrv.request.reference.position.z);
+            if ((pos - ref_pos).norm() < 0.1)
+                break;
+          }
+          mrs_msgs::String srv;
+          srv.request.value = "ExampleTracker";
+          if(!ros::service::call("/uav1/control_manager/switch_tracker", srv))
+          {
+            ROS_ERROR("Failed to call service /uav%d/tracker/start_tracker", planner_manager_->pp_.drone_id);
+          }
+          else
+          {
+            ROS_INFO("Start tracker for drone %d", planner_manager_->pp_.drone_id);
+            changeFSMExecState(WAIT_TARGET, "FSM");
+          }
+        }
+        else
+        {
+          ROS_ERROR("Failed to call service /uav1/reference");
+          
+        }
+      }
+      else // not usig mrs simulation
+      {
+        changeFSMExecState(WAIT_TARGET, "FSM");
+      }
       break;
     }
 
