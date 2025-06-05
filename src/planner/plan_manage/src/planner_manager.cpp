@@ -53,12 +53,13 @@ namespace ego_planner
                                         Eigen::Vector3d start_acc, Eigen::Vector3d local_target_pt,
                                         Eigen::Vector3d local_target_vel, bool flag_polyInit, bool flag_randomPolyTraj)
   {
+    ros::Time t_opt_start = ros::Time::now();
     std_msgs::Float64MultiArray opt_data_msg;
     static bool success_flag = true;
     static double success_timing;
 
     if(success_flag){
-      success_timing = ros::Time::now().toSec();
+      success_timing = ros::WallTime::now().toSec();
       success_flag = false;
     }
     static int count = 0;
@@ -76,14 +77,16 @@ namespace ego_planner
 
     bspline_optimizer_->setLocalTargetPt(local_target_pt);
 
-    ros::Time t_start = ros::Time::now();
-    ros::Duration t_init, t_opt, t_refine;
+    ros::WallTime t_start = ros::WallTime::now();
+    ros::WallDuration t_init, t_opt, t_refine;
 
     /*** STEP 1: INIT ***/
     double ts = (start_pt - local_target_pt).norm() > 0.1 ? pp_.ctrl_pt_dist / pp_.max_vel_ * 1.5 : pp_.ctrl_pt_dist / pp_.max_vel_ * 5; // pp_.ctrl_pt_dist / pp_.max_vel_ is too tense, and will surely exceed the acc/vel limits
     vector<Eigen::Vector3d> point_set, start_end_derivatives;
     static bool flag_first_call = true, flag_force_polynomial = false;
     bool flag_regenerate = false;
+    std::cout << "ts = " << ts << std::endl;
+    std::cout << "dist between current pos and local target = " << (start_pt - local_target_pt).norm() << std::endl;
     do
     {
       point_set.clear();
@@ -238,8 +241,8 @@ namespace ego_planner
     vector<std::pair<int, int>> segments;
     segments = bspline_optimizer_->initControlPoints(ctrl_pts, true);
 
-    t_init = ros::Time::now() - t_start;
-    t_start = ros::Time::now();
+    t_init = ros::WallTime::now() - t_start;
+    t_start = ros::WallTime::now();
 
     /*** STEP 2: OPTIMIZE ***/
     bool flag_step_1_success = false;
@@ -281,14 +284,14 @@ namespace ego_planner
         }
       }
 
-      t_opt = ros::Time::now() - t_start;
+      t_opt = ros::WallTime::now() - t_start;
 
       visualization_->displayMultiInitPathList(vis_trajs, 0.2); // This visuallization will take up several milliseconds.
     }
     else
     {
       flag_step_1_success = bspline_optimizer_->BsplineOptimizeTrajRebound(ctrl_pts, ts);
-      t_opt = ros::Time::now() - t_start;
+      t_opt = ros::WallTime::now() - t_start;
       //static int vis_id = 0;
       visualization_->displayInitPathList(point_set, 0.2, 0);
     }
@@ -307,7 +310,7 @@ namespace ego_planner
       return false;
     }
 
-    t_start = ros::Time::now();
+    t_start = ros::WallTime::now();
 
     UniformBspline pos = UniformBspline(ctrl_pts, 3, ts);
     pos.setPhysicalLimits(pp_.max_vel_, pp_.max_acc_, pp_.feasibility_tolerance_);
@@ -333,7 +336,7 @@ namespace ego_planner
       {
         printf("\033[34mThis refined trajectory hits obstacles. It doesn't matter if appeares occasionally. But if continously appearing, Increase parameter \"lambda_fitness\".\n\033[0m");
         continous_failures_count_++;
-        t_refine = ros::Time::now() - t_start;
+        t_refine = ros::WallTime::now() - t_start;
         opt_data_msg.data.push_back(t_init.toSec());
         opt_data_msg.data.push_back(t_opt.toSec());
         opt_data_msg.data.push_back(-1.0); // 
@@ -353,17 +356,17 @@ namespace ego_planner
       }
     }
 
-    t_refine = ros::Time::now() - t_start;
+    t_refine = ros::WallTime::now() - t_start;
 
     // save planned results
-    updateTrajInfo(pos, ros::Time::now());
+    updateTrajInfo(pos, t_opt_start);
 
     static double sum_time = 0;
     static int count_success = 0;
     sum_time += (t_init + t_opt + t_refine).toSec();
     count_success++;
     cout << "total time:\033[42m" << (t_init + t_opt + t_refine).toSec() << "\033[0m,optimize:" << (t_init + t_opt).toSec() << ",refine:" << t_refine.toSec() << ",avg_time=" << sum_time / count_success << endl;
-    double t_start_to_success_s = ros::Time::now().toSec() - success_timing;
+    double t_start_to_success_s = ros::WallTime::now().toSec() - success_timing;
     success_flag = true;
     opt_data_msg.data.push_back(t_init.toSec());
     opt_data_msg.data.push_back(t_opt.toSec());
