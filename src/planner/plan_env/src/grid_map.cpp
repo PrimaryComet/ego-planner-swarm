@@ -1,5 +1,6 @@
 #include "plan_env/grid_map.h"
 
+
 // #define current_img_ md_.depth_image_[image_cnt_ & 1]
 // #define last_img_ md_.depth_image_[!(image_cnt_ & 1)]
 
@@ -40,6 +41,7 @@ void GridMap::initMap(ros::NodeHandle &nh)
   node_.param("grid_map/p_occ", mp_.p_occ_, 0.80);
   node_.param("grid_map/min_ray_length", mp_.min_ray_length_, -0.1);
   node_.param("grid_map/max_ray_length", mp_.max_ray_length_, -0.1);
+  
 
   node_.param("grid_map/visualization_truncate_height", mp_.visualization_truncate_height_, -0.1);
   node_.param("grid_map/virtual_ceil_height", mp_.virtual_ceil_height_, -0.1);
@@ -50,6 +52,8 @@ void GridMap::initMap(ros::NodeHandle &nh)
   node_.param("grid_map/pose_type", mp_.pose_type_, 1);
 
   node_.param("grid_map/frame_id", mp_.frame_id_, string("world"));
+  node_.param("grid_map/body_frame_id", body_frame_id_, std::string("world"));
+  node_.param("grid_map/camera_frame_id", camera_frame_id_, std::string("world"));
   node_.param("grid_map/local_map_margin", mp_.local_map_margin_, 1);
   node_.param("grid_map/ground_height", mp_.ground_height_, 1.0);
 
@@ -100,10 +104,20 @@ void GridMap::initMap(ros::NodeHandle &nh)
   md_.proj_points_.resize(mp_.px_ * mp_.py_ / mp_.skip_pixel_ / mp_.skip_pixel_);
   md_.proj_points_cnt = 0;
 
-  md_.cam2body_ << 0.0, 0.0, 1.0, 0.0,
-      -1.0, 0.0, 0.0, 0.0,
-      0.0, -1.0, 0.0, 0.0,
-      0.0, 0.0, 0.0, 1.0;
+  // md_.cam2body_ << 0.0, 0.0, 1.0, 0.0,
+  //     -1.0, 0.0, 0.0, 0.0,
+  //     0.0, -1.0, 0.0, 0.0,
+  //     0.0, 0.0, 0.0, 1.0;
+
+  tf2_ros::Buffer tfBuffer;
+  tf2_ros::TransformListener tfListener(tfBuffer);
+  ros::Duration(1.0).sleep(); // wait for tf to be ready
+  std::cout << "camera frame id: " << camera_frame_id_ << std::endl;
+  std::cout << "body frame id: " << body_frame_id_ << std::endl;
+  md_.cam2body_ = getHomogeneousMatrix(tfBuffer, body_frame_id_,camera_frame_id_);
+
+  std::cout << "[GRID MAP] Homogeneous transformation matrix:\n" << md_.cam2body_ << std::endl;
+
 
   /* init callback */
 
@@ -1023,4 +1037,22 @@ void GridMap::depthOdomCallback(const sensor_msgs::ImageConstPtr &img,
 
   md_.occ_need_update_ = true;
   md_.flag_use_depth_fusion = true;
+}
+
+Eigen::Matrix4d GridMap::getHomogeneousMatrix(tf2_ros::Buffer& tfBuffer, const std::string& to_frame, const std::string& from_frame)
+{
+    try {
+        // Lookup the transform
+        std::cout << "[GRID_MAP] Looking up transform from " << from_frame << " to " << to_frame << std::endl;
+        geometry_msgs::TransformStamped transformStamped = tfBuffer.lookupTransform(to_frame, from_frame, ros::Time(0), ros::Duration(1.0));
+
+        // Convert to Eigen
+        Eigen::Isometry3d iso = tf2::transformToEigen(transformStamped.transform);
+
+        // Return the 4x4 homogeneous matrix
+        return iso.matrix();
+    } catch (tf2::TransformException &ex) {
+        ROS_WARN("[GRID_MAP] Transform failed: %s", ex.what());
+        return Eigen::Matrix4d::Identity(); // Fallback
+    }
 }

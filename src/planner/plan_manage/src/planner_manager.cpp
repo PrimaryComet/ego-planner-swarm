@@ -38,7 +38,7 @@ namespace ego_planner
     bspline_optimizer_->setParam(nh);
     bspline_optimizer_->setEnvironment(grid_map_, obj_predictor_);
     bspline_optimizer_->a_star_.reset(new AStar);
-    bspline_optimizer_->a_star_->initGridMap(grid_map_, Eigen::Vector3i(100, 100, 100));
+    bspline_optimizer_->a_star_->initGridMap(grid_map_, Eigen::Vector3i(250, 250, 250));
 
     visualization_ = vis;
 

@@ -23,6 +23,11 @@
 #include <message_filters/time_synchronizer.h>
 
 #include <plan_env/raycast.h>
+#include <tf2_ros/transform_listener.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <tf2_eigen/tf2_eigen.h>
+#include <geometry_msgs/TransformStamped.h>
+#include <Eigen/Dense>
 
 #define logit(x) (log((x) / (1 - (x))))
 
@@ -239,6 +244,8 @@ private:
   uniform_real_distribution<double> rand_noise_;
   normal_distribution<double> rand_noise2_;
   default_random_engine eng_;
+  string camera_frame_id_, body_frame_id_;
+  Eigen::Matrix4d getHomogeneousMatrix(tf2_ros::Buffer& tfBuffer, const std::string& from_frame, const std::string& to_frame);
 };
 
 /* ============================== definition of inline function
