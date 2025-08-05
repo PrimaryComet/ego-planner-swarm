@@ -1041,6 +1041,10 @@ void GridMap::depthOdomCallback(const sensor_msgs::ImageConstPtr &img,
 
 Eigen::Matrix4d GridMap::getHomogeneousMatrix(tf2_ros::Buffer& tfBuffer, const std::string& to_frame, const std::string& from_frame)
 {
+  int attempt_num = 100;
+  while (attempt_num > 0)
+  { 
+    attempt_num--;
     try {
         // Lookup the transform
         std::cout << "[GRID_MAP] Looking up transform from " << from_frame << " to " << to_frame << std::endl;
@@ -1053,6 +1057,9 @@ Eigen::Matrix4d GridMap::getHomogeneousMatrix(tf2_ros::Buffer& tfBuffer, const s
         return iso.matrix();
     } catch (tf2::TransformException &ex) {
         ROS_WARN("[GRID_MAP] Transform failed: %s", ex.what());
-        return Eigen::Matrix4d::Identity(); // Fallback
+        // wait, then try again
+        ros::Duration(1.0).sleep();
     }
+  }
+  return Eigen::Matrix4d::Identity(); // Fallback
 }
