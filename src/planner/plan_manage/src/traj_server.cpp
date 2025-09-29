@@ -296,7 +296,7 @@ void mrs_callback(const ros::TimerEvent &e){
 
   mrs_cmd.use_velocity_vertical = 1;
   mrs_cmd.use_velocity_horizontal = 1;
-  mrs_cmd.use_heading_rate = 1;
+  mrs_cmd.use_heading_rate = 0;
 
   mrs_cmd.use_acceleration = 1;
   mrs_cmd.use_heading_acceleration = 0;
